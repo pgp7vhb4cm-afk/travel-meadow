@@ -39,9 +39,14 @@ export async function searchFlights(params: {
   destination: string;
   departureDate: string;
   returnDate?: string;
-  passengers: number;
+  adults: number;
+  // Age (in years) for each child traveller. Duffel requires the age of
+  // any passenger under 18 — children are represented as { age } rather
+  // than { type: "adult" } — since airlines price and require different
+  // info for child/infant fares.
+  childAges?: number[];
 }): Promise<FlightOffer[]> {
-  const { origin, destination, departureDate, returnDate, passengers } = params;
+  const { origin, destination, departureDate, returnDate, adults, childAges = [] } = params;
 
   const slices: { origin: string; destination: string; departure_date: string }[] = [
     { origin, destination, departure_date: departureDate },
@@ -50,15 +55,18 @@ export async function searchFlights(params: {
     slices.push({ origin: destination, destination: origin, departure_date: returnDate });
   }
 
+  const passengers = [
+    ...Array.from({ length: Math.max(1, adults) }, () => ({ type: "adult" })),
+    ...childAges.map((age) => ({ age })),
+  ];
+
   const response = await fetch(`${DUFFEL_API_URL}/air/offer_requests?return_offers=true`, {
     method: "POST",
     headers: getDuffelHeaders(),
     body: JSON.stringify({
       data: {
         slices,
-        passengers: Array.from({ length: Math.max(1, passengers) }, () => ({
-          type: "adult",
-        })),
+        passengers,
         cabin_class: "economy",
       },
     }),

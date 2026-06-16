@@ -127,9 +127,10 @@ wrote. Without a key, a clearly-labelled sample itinerary is shown instead.
 5. Restart the server (`Ctrl+C`, then `npm run dev`)
 
 Now the "Generate itinerary" button on any destination page will research
-real, current recommendations and build a full itinerary — including
-suggested areas to stay and sources it used — instead of showing sample
-content.
+real, current recommendations and build a full itinerary — including the
+number of stops implied by the visitor's trip style, 2-3 named
+accommodation options per stop at different price points, a day-by-day
+plan, and sources it used — instead of showing sample content.
 
 ---
 

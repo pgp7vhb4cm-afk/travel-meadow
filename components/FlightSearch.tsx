@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Loader2, AlertCircle, PlaneTakeoff } from "lucide-react";
+import { Search, Loader2, AlertCircle, PlaneTakeoff, Plus, Minus, X } from "lucide-react";
 import type { FlightOffer } from "@/lib/duffel";
 
 function formatDuration(iso: string): string {
@@ -50,11 +50,28 @@ export default function FlightSearch({
   const [destination, setDestination] = useState(destinationIata);
   const [departureDate, setDepartureDate] = useState("2026-08-01");
   const [returnDate, setReturnDate] = useState("2026-08-15");
-  const [passengers, setPassengers] = useState(2);
+  const [adults, setAdults] = useState(2);
+  // Each entry is that child's age in years (0-17). Duffel needs an exact
+  // age per child to return correctly priced child/infant fares.
+  const [childAges, setChildAges] = useState<number[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const totalPassengers = adults + childAges.length;
+
+  function addChild() {
+    setChildAges((prev) => [...prev, 5]);
+  }
+
+  function removeChild(index: number) {
+    setChildAges((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateChildAge(index: number, age: number) {
+    setChildAges((prev) => prev.map((a, i) => (i === index ? age : a)));
+  }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +88,8 @@ export default function FlightSearch({
           destination: destination.trim().toUpperCase(),
           departureDate,
           returnDate: returnDate || undefined,
-          passengers,
+          adults,
+          childAges,
         }),
       });
 
@@ -90,66 +108,115 @@ export default function FlightSearch({
 
   return (
     <div>
-      <form onSubmit={handleSearch} className="grid gap-3 sm:grid-cols-5 mb-3">
-        <Field label="From">
-          <input
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            className="input"
-            maxLength={3}
-          />
-        </Field>
-        <Field label="To (IATA)">
-          <input
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            className="input"
-            maxLength={3}
-          />
-        </Field>
-        <Field label="Depart">
-          <input
-            type="date"
-            value={departureDate}
-            onChange={(e) => setDepartureDate(e.target.value)}
-            className="input"
-          />
-        </Field>
-        <Field label="Return">
-          <input
-            type="date"
-            value={returnDate}
-            onChange={(e) => setReturnDate(e.target.value)}
-            className="input"
-          />
-        </Field>
-        <Field label="Passengers">
-          <select
-            value={passengers}
-            onChange={(e) => setPassengers(Number(e.target.value))}
-            className="input"
-          >
-            <option value={1}>1 adult</option>
-            <option value={2}>2 adults</option>
-            <option value={3}>3 adults</option>
-            <option value={4}>4 adults</option>
-          </select>
-        </Field>
-
-        <div className="sm:col-span-5">
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center gap-2 bg-meadow text-white text-sm px-4 py-2 rounded-md hover:bg-meadow-dark transition-colors disabled:opacity-60"
-          >
-            {loading ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Search size={16} aria-hidden="true" />
-            )}
-            Search flights to {destinationName}
-          </button>
+      <form onSubmit={handleSearch} className="mb-3">
+        <div className="grid gap-3 sm:grid-cols-4 mb-3">
+          <Field label="From">
+            <input
+              value={origin}
+              onChange={(e) => setOrigin(e.target.value)}
+              className="input"
+              maxLength={3}
+            />
+          </Field>
+          <Field label="To (IATA)">
+            <input
+              value={destination}
+              onChange={(e) => setDestination(e.target.value)}
+              className="input"
+              maxLength={3}
+            />
+          </Field>
+          <Field label="Depart">
+            <input
+              type="date"
+              value={departureDate}
+              onChange={(e) => setDepartureDate(e.target.value)}
+              className="input"
+            />
+          </Field>
+          <Field label="Return">
+            <input
+              type="date"
+              value={returnDate}
+              onChange={(e) => setReturnDate(e.target.value)}
+              className="input"
+            />
+          </Field>
         </div>
+
+        {/* Passengers: adults + children with per-child age */}
+        <div className="border border-gray-200 rounded-lg p-3 mb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+            <span className="text-sm text-gray-700">Adults</span>
+            <Stepper
+              value={adults}
+              onChange={setAdults}
+              min={1}
+              max={9}
+              label="adults"
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <span className="text-sm text-gray-700">Children</span>
+              <p className="text-xs text-gray-400">Under 18 — age needed for accurate fares</p>
+            </div>
+            <button
+              type="button"
+              onClick={addChild}
+              disabled={childAges.length >= 8}
+              className="inline-flex items-center gap-1 text-xs text-meadow hover:text-meadow-dark transition-colors disabled:text-gray-300"
+            >
+              <Plus size={14} aria-hidden="true" /> Add child
+            </button>
+          </div>
+
+          {childAges.length > 0 && (
+            <div className="flex flex-col gap-2 mt-3">
+              {childAges.map((age, index) => (
+                <div key={index} className="flex items-center gap-2 bg-gray-50 rounded-md p-2">
+                  <span className="text-xs text-gray-500 w-16">Child {index + 1}</span>
+                  <label className="flex items-center gap-1.5 flex-1">
+                    <span className="text-xs text-gray-400">Age</span>
+                    <select
+                      value={age}
+                      onChange={(e) => updateChildAge(index, Number(e.target.value))}
+                      className="input h-8 text-xs flex-1"
+                    >
+                      {Array.from({ length: 18 }, (_, i) => i).map((yearAge) => (
+                        <option key={yearAge} value={yearAge}>
+                          {yearAge === 0 ? "Under 1" : `${yearAge} ${yearAge === 1 ? "year" : "years"}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeChild(index)}
+                    aria-label={`Remove child ${index + 1}`}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex items-center gap-2 bg-meadow text-white text-sm px-4 py-2 rounded-md hover:bg-meadow-dark transition-colors disabled:opacity-60"
+        >
+          {loading ? (
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Search size={16} aria-hidden="true" />
+          )}
+          Search flights to {destinationName}
+        </button>
       </form>
 
       {error && (
@@ -195,7 +262,7 @@ export default function FlightSearch({
                   <div className="text-lg font-medium text-gray-900">
                     {formatPrice(offer.totalAmount, offer.totalCurrency)}
                   </div>
-                  <div className="text-xs text-gray-400">total · {passengers} pax</div>
+                  <div className="text-xs text-gray-400">total · {totalPassengers} pax</div>
                 </div>
               </div>
             ))}
@@ -214,6 +281,44 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </span>
       {children}
     </label>
+  );
+}
+
+function Stepper({
+  value,
+  onChange,
+  min,
+  max,
+  label,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+        aria-label={`Decrease ${label}`}
+        className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:border-meadow hover:text-meadow transition-colors disabled:opacity-30"
+      >
+        <Minus size={13} aria-hidden="true" />
+      </button>
+      <span className="text-sm text-gray-900 w-4 text-center">{value}</span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+        aria-label={`Increase ${label}`}
+        className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:border-meadow hover:text-meadow transition-colors disabled:opacity-30"
+      >
+        <Plus size={13} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

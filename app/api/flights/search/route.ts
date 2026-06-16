@@ -4,7 +4,8 @@ import { mockFlights } from "@/lib/mockData";
 
 // POST /api/flights/search
 //
-// Body: { origin, destination, departureDate, returnDate?, passengers }
+// Body: { origin, destination, departureDate, returnDate?, adults, childAges? }
+// childAges is an array of ages (0-17) for each child traveller.
 //
 // This route runs on the server, so the Duffel API key (read from
 // process.env.DUFFEL_API_KEY inside lib/duffel.ts) is never sent to the
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { origin, destination, departureDate, returnDate, passengers } = body || {};
+  const { origin, destination, departureDate, returnDate, adults, childAges } = body || {};
 
   if (!origin || !destination || !departureDate) {
     return NextResponse.json(
@@ -26,13 +27,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const passengerCount = Number(passengers) || 1;
+  const adultCount = Number(adults) || 1;
+  const parsedChildAges: number[] = Array.isArray(childAges)
+    ? childAges.map((age: any) => Number(age)).filter((age: number) => Number.isFinite(age))
+    : [];
+
+  if (parsedChildAges.some((age) => age < 0 || age > 17)) {
+    return NextResponse.json(
+      { error: "Child ages must be between 0 and 17" },
+      { status: 400 }
+    );
+  }
+
+  const totalPassengers = adultCount + parsedChildAges.length;
 
   // No API key configured — return sample data so the site still works.
   if (!hasDuffelKey()) {
     return NextResponse.json({
       source: "mock",
-      offers: mockFlights(origin, destination, departureDate, passengerCount),
+      offers: mockFlights(origin, destination, departureDate, totalPassengers),
     });
   }
 
@@ -42,13 +55,14 @@ export async function POST(request: NextRequest) {
       destination,
       departureDate,
       returnDate,
-      passengers: passengerCount,
+      adults: adultCount,
+      childAges: parsedChildAges,
     });
 
     if (offers.length === 0) {
       return NextResponse.json({
         source: "mock",
-        offers: mockFlights(origin, destination, departureDate, passengerCount),
+        offers: mockFlights(origin, destination, departureDate, totalPassengers),
         warning: "No live offers were found for these dates — showing sample results instead.",
       });
     }
@@ -57,7 +71,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({
       source: "mock",
-      offers: mockFlights(origin, destination, departureDate, passengerCount),
+      offers: mockFlights(origin, destination, departureDate, totalPassengers),
       warning: `Duffel API error: ${error.message || "unknown error"} — showing sample results instead.`,
     });
   }

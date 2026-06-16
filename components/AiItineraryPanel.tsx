@@ -154,17 +154,46 @@ export default function AiItineraryPanel({
         </p>
       )}
 
-      {itinerary.suggestedAreas.length > 0 && (
+      {itinerary.stops.length > 0 && (
         <div className="mb-5">
           <h4 className="flex items-center gap-1.5 text-sm font-medium text-gray-900 mb-2">
             <MapPin size={14} className="text-meadow" aria-hidden="true" />
-            Suggested areas to stay
+            {itinerary.stops.length > 1
+              ? `Where to stay — ${itinerary.stops.length} stops`
+              : "Where to stay"}
           </h4>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {itinerary.suggestedAreas.map((area) => (
-              <div key={area.name} className="border border-gray-100 bg-gray-50 rounded-lg p-3">
-                <p className="text-sm font-medium text-gray-800">{area.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{area.whyStay}</p>
+          <div className="flex flex-col gap-3">
+            {itinerary.stops.map((stop) => (
+              <div key={stop.stopNumber} className="border border-gray-100 bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                  <p className="text-sm font-medium text-gray-800">
+                    {itinerary.stops.length > 1 ? `Stop ${stop.stopNumber}: ` : ""}
+                    {stop.area}
+                  </p>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    {stop.nights} night{stop.nights !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mb-2">{stop.whyStay}</p>
+                {stop.accommodationOptions.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {stop.accommodationOptions.map((option) => (
+                      <div
+                        key={option.name}
+                        className="bg-white border border-gray-100 rounded-md p-2 flex items-start justify-between gap-2"
+                      >
+                        <div>
+                          <p className="text-xs font-medium text-gray-800">{option.name}</p>
+                          <p className="text-xs text-gray-400">{option.type}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{option.whyGoodFit}</p>
+                        </div>
+                        <span className="text-xs bg-meadow-light text-meadow-dark rounded-full px-2 py-0.5 whitespace-nowrap">
+                          {option.priceIndicator}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
