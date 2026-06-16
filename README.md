@@ -105,7 +105,35 @@ payment provider (e.g. Stripe) into the booking step.
 
 ---
 
-## 6. Project structure
+## 6. Connect AI-powered itineraries (Anthropic)
+
+Each destination page can generate a tailored, day-by-day itinerary using
+Claude with web search — so recommendations are grounded in what
+reputable travel sites are currently saying, not just static text we
+wrote. Without a key, a clearly-labelled sample itinerary is shown instead.
+
+1. Sign up at **[console.anthropic.com](https://console.anthropic.com)**
+   (this is the developer console — separate from claude.ai)
+2. Add a payment method under **Settings → Billing** (pay-as-you-go, no
+   subscription — each itinerary generation typically costs a few cents)
+3. Go to **Settings → API keys** and create a new key (starts with
+   `sk-ant-`)
+4. Add it to your `.env.local` file:
+
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+5. Restart the server (`Ctrl+C`, then `npm run dev`)
+
+Now the "Generate itinerary" button on any destination page will research
+real, current recommendations and build a full itinerary — including
+suggested areas to stay and sources it used — instead of showing sample
+content.
+
+---
+
+## 7. Project structure
 
 ```
 travel-meadow/
@@ -117,22 +145,26 @@ travel-meadow/
 │   │   └── page.tsx              → Destination page (one per destination, e.g. /destinations/bali)
 │   └── api/
 │       ├── flights/search/route.ts → Secure backend route that calls Duffel for flights
-│       └── hotels/search/route.ts  → Secure backend route that calls Duffel for hotels
+│       ├── hotels/search/route.ts  → Secure backend route that calls Duffel for hotels
+│       └── itinerary/route.ts      → Secure backend route that calls Claude for AI itineraries
 ├── components/
 │   ├── TripPlanner.tsx           → The step-by-step questionnaire + matching results
 │   ├── DestinationCard.tsx       → A destination preview card
 │   ├── FlightSearch.tsx          → Flight search form + results
-│   └── HotelSearch.tsx           → Hotel search form + results
+│   ├── HotelSearch.tsx           → Hotel search form + results
+│   └── AiItineraryPanel.tsx      → AI-generated itinerary, shown on destination pages
 ├── lib/
 │   ├── destinations.ts           → All destination content + matching logic
 │   ├── duffel.ts                  → Duffel API client (server-only)
+│   ├── anthropic.ts               → Claude API client for itineraries (server-only)
+│   ├── answerParams.ts            → Encodes/decodes planner answers into URL params
 │   └── mockData.ts                → Sample data shown when no API key is set
-└── .env.local.example             → Template for your Duffel API key
+└── .env.local.example             → Template for your Duffel & Anthropic API keys
 ```
 
 ---
 
-## 7. Adding or editing destinations
+## 8. Adding or editing destinations
 
 All destination content lives in **`lib/destinations.ts`** — each
 destination is a plain object with its name, description, highlights, tips,
@@ -142,25 +174,28 @@ and the airport/coordinates used for searches. Add a new object to the
 
 The `tags` on each destination control how the trip planner matches it to a
 visitor's answers — add or adjust tags to change how often a destination
-gets recommended.
+gets recommended. Two answer types (`travelTime` and `region`) act as hard
+filters rather than soft preferences — a destination tagged only for
+long-haul travel won't be shown to someone who asked for a 3-hour flight,
+even if it scores well on everything else.
 
 ---
 
-## 8. Deploying the site
+## 9. Deploying the site
 
 The easiest way to put this online is [Vercel](https://vercel.com) (made by
 the creators of Next.js, free for personal projects):
 
 1. Push this project to a GitHub repository
 2. Go to [vercel.com/new](https://vercel.com/new) and import the repository
-3. In the project settings, add an environment variable:
-   - Name: `DUFFEL_API_KEY`
-   - Value: your Duffel key
+3. In the project settings, add environment variables:
+   - Name: `DUFFEL_API_KEY`, Value: your Duffel key
+   - Name: `ANTHROPIC_API_KEY`, Value: your Anthropic key
 4. Deploy — Vercel builds and hosts it automatically
 
 ---
 
-## 9. Ideas for what to build next
+## 10. Ideas for what to build next
 
 - **Booking flow**: Duffel's flow is search → price confirmation → create
   order (flights), or search → quote → booking (hotels). Each step needs
@@ -170,9 +205,9 @@ the creators of Next.js, free for personal projects):
 - **User accounts & saved trips**: e.g. with
   [NextAuth.js](https://next-auth.js.org) and a database like
   [Supabase](https://supabase.com) or [Postgres](https://vercel.com/storage/postgres).
-- **AI-powered recommendations**: replace or augment the rule-based matching
-  in `lib/destinations.ts` with a call to the Anthropic API for more
-  conversational, personalised suggestions.
+- **Cache itineraries**: store generated itineraries (e.g. in a database
+  keyed by destination + answers) so identical requests don't re-trigger a
+  fresh, paid AI generation every time.
 - **Car hire**: add a `lib/carHire.ts` client following the same pattern as
   `lib/duffel.ts`, plus a new `app/api/cars/search/route.ts` — providers
   like Rentalcars/Cartrawler work similarly.

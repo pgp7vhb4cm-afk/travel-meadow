@@ -11,12 +11,18 @@ const ICONS: Record<MetaIcon, typeof Sun> = {
 
 export default function DestinationCard({
   destination,
+  queryString,
 }: {
   destination: Destination;
+  queryString?: string;
 }) {
+  const href = queryString
+    ? `/destinations/${destination.slug}?${queryString}`
+    : `/destinations/${destination.slug}`;
+
   return (
     <Link
-      href={`/destinations/${destination.slug}`}
+      href={href}
       className="block border border-gray-200 rounded-xl p-4 hover:border-meadow transition-colors group h-full"
     >
       <div className="flex items-center justify-between mb-1 gap-2">

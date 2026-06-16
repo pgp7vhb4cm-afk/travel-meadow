@@ -378,33 +378,95 @@ const FLEXIBLE_ANSWERS = new Set([
   "Flexible — best value",
 ]);
 
+// Hard-filter keys: a real travel advisor treats these as constraints, not
+// just preferences. If a destination doesn't satisfy one of these, it's
+// excluded entirely rather than just scoring lower — this is what stops
+// a 14-hour Bali flight being suggested to someone who asked for 3 hours.
+const HARD_FILTER_KEYS: AnswerKey[] = ["travelTime", "region"];
+
+// Some answers represent a maximum/ceiling rather than an exact category
+// (e.g. "Short-haul (up to 3 hours)" should also accept anything that's
+// even shorter, like "No flights"). This ranks travel time options so we
+// can check "is the destination's travel time <= the visitor's max".
+const TRAVEL_TIME_ORDER = [
+  "No flights — UK only",
+  "Short-haul (up to 3 hours)",
+  "Medium-haul (3–6 hours)",
+  "Long-haul (6–12 hours)",
+  "Anywhere",
+];
+
+function travelTimeSatisfies(destinationTimes: string[], visitorChoice: string): boolean {
+  if (visitorChoice === "Anywhere") return true;
+  const maxIndex = TRAVEL_TIME_ORDER.indexOf(visitorChoice);
+  if (maxIndex === -1) return destinationTimes.includes(visitorChoice);
+  // A destination is acceptable if ANY of its tagged travel times falls
+  // at or below the visitor's stated maximum.
+  return destinationTimes.some((t) => {
+    const idx = TRAVEL_TIME_ORDER.indexOf(t);
+    return idx !== -1 && idx <= maxIndex;
+  });
+}
+
+function passesHardFilters(
+  destination: Destination,
+  answers: Partial<Record<AnswerKey, string[]>>
+): boolean {
+  for (const key of HARD_FILTER_KEYS) {
+    const values = answers[key];
+    if (!values || values.length === 0) continue;
+
+    const tagValues = destination.tags[key];
+    if (!tagValues) continue;
+
+    const anyFlexible = values.some((v) => FLEXIBLE_ANSWERS.has(v));
+    if (anyFlexible) continue;
+
+    if (key === "travelTime") {
+      const satisfied = values.some((v) => travelTimeSatisfies(tagValues, v));
+      if (!satisfied) return false;
+    } else {
+      const satisfied = values.some((v) => tagValues.includes(v));
+      if (!satisfied) return false;
+    }
+  }
+  return true;
+}
+
 export function matchDestinations(
   answers: Partial<Record<AnswerKey, string[]>>
 ): MatchResult[] {
-  return DESTINATIONS.map((destination) => {
-    let score = 0;
-    const matchedOn: string[] = [];
+  return DESTINATIONS.filter((destination) => passesHardFilters(destination, answers))
+    .map((destination) => {
+      let score = 0;
+      const matchedOn: string[] = [];
 
-    for (const [key, values] of Object.entries(answers) as [
-      AnswerKey,
-      string[]
-    ][]) {
-      if (!values || values.length === 0) continue;
-      const tagValues = destination.tags[key];
-      if (!tagValues) continue;
+      for (const [key, values] of Object.entries(answers) as [
+        AnswerKey,
+        string[]
+      ][]) {
+        if (!values || values.length === 0) continue;
+        const tagValues = destination.tags[key];
+        if (!tagValues) continue;
 
-      for (const value of values) {
-        if (FLEXIBLE_ANSWERS.has(value)) {
-          score += 0.5;
-          continue;
-        }
-        if (tagValues.includes(value)) {
-          score += 1;
-          matchedOn.push(value);
+        for (const value of values) {
+          if (FLEXIBLE_ANSWERS.has(value)) {
+            score += 0.5;
+            continue;
+          }
+          if (key === "travelTime" && travelTimeSatisfies(tagValues, value)) {
+            score += 1;
+            matchedOn.push(value);
+            continue;
+          }
+          if (tagValues.includes(value)) {
+            score += 1;
+            matchedOn.push(value);
+          }
         }
       }
-    }
 
-    return { destination, score, matchedOn };
-  }).sort((a, b) => b.score - a.score);
+      return { destination, score, matchedOn };
+    })
+    .sort((a, b) => b.score - a.score);
 }

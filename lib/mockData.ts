@@ -4,6 +4,62 @@
 // which results are real and which are samples.
 
 import type { FlightOffer, HotelOffer } from "./duffel";
+import type { AiItinerary } from "./anthropic";
+import type { Destination } from "./destinations";
+
+const DURATION_DAY_COUNTS: Record<string, number> = {
+  "Long weekend (3–4 days)": 4,
+  "One week": 7,
+  "10–12 days": 11,
+  "Two weeks": 14,
+  "Three weeks or more": 21,
+};
+
+export function mockItinerary(
+  destination: Destination,
+  answers: Partial<Record<string, string[]>>
+): AiItinerary {
+  const durationAnswer = answers.duration?.[0];
+  const dayCount = (durationAnswer && DURATION_DAY_COUNTS[durationAnswer]) || 7;
+
+  const days = Array.from({ length: dayCount }, (_, i) => {
+    const day = i + 1;
+    if (day === 1) {
+      return {
+        day,
+        title: `Arrive in ${destination.city}`,
+        description: `Settle in, get your bearings, and ease into the trip with a relaxed first evening near your accommodation in ${destination.city}.`,
+      };
+    }
+    if (day === dayCount) {
+      return {
+        day,
+        title: "Final morning & departure",
+        description: `Use the morning for any last sights or a final relaxed meal before heading to the airport for your departure.`,
+      };
+    }
+    const highlight = destination.highlights[(day - 2) % destination.highlights.length];
+    return {
+      day,
+      title: highlight,
+      description: `Spend the day exploring ${highlight.toLowerCase()} — one of ${destination.name}'s well-known highlights, with time built in to relax and explore at your own pace.`,
+    };
+  });
+
+  return {
+    destinationSlug: destination.slug,
+    summary: `A sample ${dayCount}-day outline for ${destination.name}. This is placeholder content — add an Anthropic API key to generate a real, web-researched itinerary tailored to your answers.`,
+    bestTimeToVisit: destination.meta.find((m) => m.icon === "calendar")?.label || "",
+    suggestedAreas: [
+      {
+        name: destination.city,
+        whyStay: "A convenient, central base for exploring the area.",
+      },
+    ],
+    days,
+    sources: [],
+  };
+}
 
 export function mockFlights(
   origin: string,

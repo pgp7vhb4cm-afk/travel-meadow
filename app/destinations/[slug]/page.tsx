@@ -12,8 +12,10 @@ import {
   Check,
 } from "lucide-react";
 import { DESTINATIONS, getDestinationBySlug, type MetaIcon } from "@/lib/destinations";
+import { decodeAnswers } from "@/lib/answerParams";
 import FlightSearch from "@/components/FlightSearch";
 import HotelSearch from "@/components/HotelSearch";
+import AiItineraryPanel from "@/components/AiItineraryPanel";
 
 const ICONS: Record<MetaIcon, typeof Sun> = {
   sun: Sun,
@@ -28,11 +30,15 @@ export function generateStaticParams() {
 
 export default function DestinationPage({
   params,
+  searchParams,
 }: {
   params: { slug: string };
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   const destination = getDestinationBySlug(params.slug);
   if (!destination) notFound();
+
+  const plannerAnswers = decodeAnswers(searchParams);
 
   return (
     <div>
@@ -88,6 +94,15 @@ export default function DestinationPage({
           <div className="bg-meadow-light border border-meadow/20 rounded-xl p-4 text-sm text-meadow-dark leading-relaxed">
             {destination.why}
           </div>
+        </section>
+
+        {/* AI-powered tailored itinerary */}
+        <section className="mb-8">
+          <AiItineraryPanel
+            slug={destination.slug}
+            answers={plannerAnswers}
+            destinationName={destination.name}
+          />
         </section>
 
         {/* Highlights */}
