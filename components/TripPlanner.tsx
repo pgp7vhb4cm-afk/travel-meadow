@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Sparkles, RotateCcw, Check } from "lucide-react";
-import { matchDestinations, type AnswerKey } from "@/lib/destinations";
-import { encodeAnswers } from "@/lib/answerParams";
-import DestinationCard from "./DestinationCard";
+import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
+import type { AnswerKey } from "@/lib/destinations";
+import AiDestinationResults from "./AiDestinationResults";
 
 type PlannerStep = {
   id: AnswerKey;
@@ -178,60 +177,9 @@ export default function TripPlanner() {
   }
 
   if (showResults) {
-    const allMatches = matchDestinations(answers);
-    const matches = allMatches.slice(0, 3);
-    const noStrictMatches = allMatches.length === 0;
-
-    // If hard filters (like travel time) ruled out every destination,
-    // relax travel time and show the closest options instead of nothing —
-    // a real advisor would say "nothing fits exactly, but here's close".
-    const fallbackMatches = noStrictMatches
-      ? matchDestinations({ ...answers, travelTime: undefined }).slice(0, 3)
-      : [];
-
-    const displayMatches = noStrictMatches ? fallbackMatches : matches;
-
     return (
       <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <Sparkles size={18} className="text-meadow" aria-hidden="true" />
-          <h2 className="text-lg font-medium text-gray-900">
-            {noStrictMatches ? "Nothing fits exactly, but here's close" : "Your top matches"}
-          </h2>
-        </div>
-        <p className="text-sm text-gray-500 mb-5">
-          {noStrictMatches
-            ? "Nothing in our current list matches your travel time exactly — these are the closest options if you're willing to flex that a little."
-            : "Based on what you told us, here's where we'd point you first. Click any destination to explore it and search real flights and hotels."}
-        </p>
-
-        {displayMatches.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            We don't have a great match for this combination yet — try adjusting your
-            answers, especially region or travel time.
-          </p>
-        ) : (
-          <div className="grid sm:grid-cols-3 gap-4 mb-5">
-            {displayMatches.map(({ destination, matchedOn }) => (
-              <div key={destination.slug} className="flex flex-col gap-2">
-                <DestinationCard destination={destination} queryString={encodeAnswers(answers)} />
-                {matchedOn.length > 0 && (
-                  <p className="text-xs text-gray-400 px-1">
-                    Matches: {Array.from(new Set(matchedOn)).join(", ")}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <button
-          onClick={restart}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-        >
-          <RotateCcw size={14} aria-hidden="true" />
-          Start again
-        </button>
+        <AiDestinationResults answers={answers} onReset={restart} />
       </div>
     );
   }

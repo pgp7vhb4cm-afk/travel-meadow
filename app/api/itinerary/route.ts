@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasAnthropicKey, generateItinerary } from "@/lib/anthropic";
 import { mockItinerary } from "@/lib/mockData";
 import { getDestinationBySlug } from "@/lib/destinations";
+import type { Destination } from "@/lib/destinations";
 
 // POST /api/itinerary
 //
-// Body: { slug: string, answers: Record<string, string[]> }
+// Body: { slug: string, answers: Record<string, string[]>, customDestination? }
 //
-// This route runs on the server, so the Anthropic API key is never sent
-// to the browser. It uses Claude with web search enabled to ground the
-// itinerary in current, real travel recommendations rather than relying
-// purely on the model's training data.
+// customDestination is provided when the visitor landed on an AI-discovered
+// destination that isn't in our curated list — we build a minimal Destination
+// object from it so the existing generateItinerary / mockItinerary functions
+// work without modification.
 export async function POST(request: NextRequest) {
   let body: any;
   try {
@@ -19,18 +20,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { slug, answers } = body || {};
+  const { slug, answers, customDestination } = body || {};
+  const safeAnswers = answers && typeof answers === "object" ? answers : {};
 
-  if (!slug) {
-    return NextResponse.json({ error: "slug is required" }, { status: 400 });
+  // Resolve destination — curated list first, then custom.
+  let destination: Destination | undefined = getDestinationBySlug(slug);
+
+  if (!destination && customDestination?.name) {
+    // Build a minimal Destination from the AI suggestion data.
+    destination = {
+      slug: slug || customDestination.name.toLowerCase().replace(/\s+/g, "-"),
+      name: customDestination.name,
+      country: customDestination.country || "",
+      emoji: "🌍",
+      tagline: "Discover " + customDestination.name,
+      why: customDestination.name + " is an AI-recommended destination based on your preferences.",
+      bannerColor: "#1a6b4a",
+      meta: [],
+      highlights: [],
+      tips: [],
+      iata: customDestination.iata || "",
+      city: customDestination.city || customDestination.name,
+      lat: customDestination.lat || 0,
+      lng: customDestination.lng || 0,
+      tags: {
+        region: [],
+        party: [],
+        interest: [],
+        weather: [],
+        duration: [],
+        travelTime: [],
+        style: [],
+        budget: [],
+      },
+    };
   }
 
-  const destination = getDestinationBySlug(slug);
   if (!destination) {
     return NextResponse.json({ error: "Unknown destination" }, { status: 404 });
   }
-
-  const safeAnswers = answers && typeof answers === "object" ? answers : {};
 
   if (!hasAnthropicKey()) {
     return NextResponse.json({
@@ -46,7 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       source: "mock",
       itinerary: mockItinerary(destination, safeAnswers),
-      warning: `AI itinerary error: ${error.message || "unknown error"} — showing a sample outline instead.`,
+      warning: "AI itinerary error: " + (error.message || "unknown error") + " — showing a sample outline instead.",
     });
   }
 }

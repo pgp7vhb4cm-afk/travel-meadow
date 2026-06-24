@@ -29,10 +29,19 @@ export default function AiItineraryPanel({
   slug,
   answers,
   destinationName,
+  customDestination,
 }: {
   slug: string;
   answers: Record<string, string[]>;
   destinationName: string;
+  customDestination?: {
+    name: string;
+    country: string;
+    city: string;
+    iata: string;
+    lat: number;
+    lng: number;
+  };
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ApiResponse | null>(null);
@@ -57,7 +66,7 @@ export default function AiItineraryPanel({
       const response = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, answers }),
+        body: JSON.stringify({ slug, answers, customDestination }),
       });
       const data: ApiResponse = await response.json();
       if (!response.ok) {

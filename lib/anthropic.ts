@@ -1,21 +1,16 @@
-// Server-side Anthropic API client for AI-powered itinerary generation.
+// Server-side Anthropic API client for AI-powered itinerary generation
+// and destination discovery.
 //
 // IMPORTANT: This file should only ever be imported from server code
 // (e.g. app/api/.../route.ts). It reads process.env.ANTHROPIC_API_KEY,
 // which must never be exposed to the browser.
-//
-// This uses Claude with the web_search tool so recommendations are
-// grounded in what reputable travel sites are currently saying, rather
-// than relying purely on the model's training data — important for
-// things like "best area to stay" or "current top-rated tours", which
-// change over time.
 //
 // Docs: https://docs.claude.com/en/docs/agents-and-tools/tool-use/web-search-tool
 
 import type { Destination } from "./destinations";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-5";
+const MODEL = "claude-sonnet-4-6";
 
 export function hasAnthropicKey(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -160,4 +155,170 @@ export async function generateItinerary(
     days: Array.isArray(parsed.days) ? parsed.days : [],
     sources: Array.isArray(parsed.sources) ? parsed.sources : [],
   };
+}
+
+// ─── AI Destination Discovery ─────────────────────────────────────────────────
+//
+// Uses Claude with web search to find destinations from anywhere in the world
+// that match a visitor's planner answers. Returns a streaming response so the
+// browser can display live progress messages while Claude researches.
+//
+// The stream emits newline-delimited JSON events:
+//   { type: "progress", message: "Checking what's in season..." }
+//   { type: "result", destinations: [...] }
+//   { type: "error", message: "..." }
+
+export type AiDestinationSuggestion = {
+  name: string;
+  country: string;
+  region: string;
+  emoji: string;
+  tagline: string;
+  whyMatch: string;
+  highlights: string[];
+  bestTimeToVisit: string;
+  flightTime: string;
+  priceIndicator: string;
+  iata: string;
+  lat: number;
+  lng: number;
+};
+
+function buildDestinationSearchPrompt(
+  answers: PlannerAnswers,
+  count: number
+): string {
+  const answerLines = Object.entries(answers)
+    .filter(([, values]) => values && values.length > 0)
+    .map(([key, values]) => `- ${key}: ${(values as string[]).join(", ")}`)
+    .join("\n");
+
+  return `You are a senior Trailfinders-style travel consultant with expert knowledge of destinations worldwide. A customer has just completed our travel planning questionnaire.
+
+Customer's answers:
+${answerLines || "- No preferences given — suggest a varied, globally representative shortlist"}
+
+Your task: use web search to find exactly ${count} destinations from anywhere in the world that genuinely match this customer's answers. Don't limit yourself to obvious choices — think like a real advisor who knows hidden gems, not just the top Google results. Consider:
+- Destinations currently in season for their travel dates / weather preference
+- Flight time constraints as a hard filter (e.g. "Short-haul (up to 3 hours)" from London rules out anything over ~3h flight time)
+- Party type (a young family needs very different things from a solo adventurer)
+- Budget compatibility
+- Their specific interests and trip style
+
+Search for:
+1. Current "best destinations for [their interests] [current season]" from reputable travel sources
+2. Hidden gem or lesser-known alternatives that fit their profile
+3. Verify flight times from London for each candidate
+
+Return ONLY valid JSON (no markdown, no backticks, no commentary) as an array of exactly ${count} objects:
+
+[
+  {
+    "name": "Destination or city name",
+    "country": "Country name",
+    "region": "e.g. Southern Europe / Southeast Asia / Caribbean",
+    "emoji": "Single relevant emoji",
+    "tagline": "One punchy sentence that would make someone want to go",
+    "whyMatch": "2-3 sentences explaining specifically why this matches their answers — be concrete, reference their actual preferences",
+    "highlights": ["highlight 1", "highlight 2", "highlight 3"],
+    "bestTimeToVisit": "One sentence on timing for their stated weather/date preference",
+    "flightTime": "Approximate flight time from London e.g. '2h 30m direct'",
+    "priceIndicator": "Budget / Mid-range / Premium / Luxury",
+    "iata": "IATA code for the nearest major airport e.g. BCN",
+    "lat": 41.3874,
+    "lng": 2.1686
+  }
+]
+
+Ensure geographic variety — don't return ${count} destinations from the same country or region unless the customer specifically requested a region. At least one suggestion should be a destination the customer may not have considered.`;
+}
+
+// Streams newline-delimited JSON progress events and a final result event.
+// The caller (the API route) pipes this directly to a Next.js streaming
+// Response so the browser receives updates in real time.
+export async function streamDestinationSearch(
+  answers: PlannerAnswers,
+  count: number,
+  onProgress: (message: string) => void
+): Promise<AiDestinationSuggestion[]> {
+  const progressMessages = [
+    "Thinking about what suits you best...",
+    "Searching for destinations that match your interests...",
+    "Checking what's in season for your weather preference...",
+    "Verifying flight times from London...",
+    "Looking for hidden gems you might not have considered...",
+    "Cross-checking reviews and current recommendations...",
+    "Putting your shortlist together...",
+  ];
+
+  // Emit progress messages on a timer while the real API call runs.
+  let msgIndex = 0;
+  onProgress(progressMessages[msgIndex]);
+  const progressInterval = setInterval(() => {
+    msgIndex = Math.min(msgIndex + 1, progressMessages.length - 1);
+    onProgress(progressMessages[msgIndex]);
+  }, 4000);
+
+  try {
+    const response = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4000,
+        messages: [
+          { role: "user", content: buildDestinationSearchPrompt(answers, count) },
+        ],
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+      }),
+    });
+
+    const json = await response.json();
+
+    if (json.error) {
+      throw new Error(json.error.message || "Unknown Anthropic API error");
+    }
+
+    const textBlocks = (json.content || [])
+      .filter((block: any) => block.type === "text")
+      .map((block: any) => block.text)
+      .join("\n");
+
+    const cleaned = textBlocks.replace(/```json|```/g, "").trim();
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (!match) throw new Error("Could not parse destination search response");
+      parsed = JSON.parse(match[0]);
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Expected an array of destinations");
+    }
+
+    return parsed.slice(0, count).map((d: any) => ({
+      name: d.name || "Unknown",
+      country: d.country || "",
+      region: d.region || "",
+      emoji: d.emoji || "🌍",
+      tagline: d.tagline || "",
+      whyMatch: d.whyMatch || "",
+      highlights: Array.isArray(d.highlights) ? d.highlights : [],
+      bestTimeToVisit: d.bestTimeToVisit || "",
+      flightTime: d.flightTime || "",
+      priceIndicator: d.priceIndicator || "Mid-range",
+      iata: d.iata || "",
+      lat: Number(d.lat) || 0,
+      lng: Number(d.lng) || 0,
+    }));
+  } finally {
+    clearInterval(progressInterval);
+  }
 }
