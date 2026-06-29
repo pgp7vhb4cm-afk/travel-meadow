@@ -2,77 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasDuffelKey, searchFlights } from "@/lib/duffel";
 import { mockFlights } from "@/lib/mockData";
 
-// POST /api/flights/search
-//
-// Body: { origin, destination, departureDate, returnDate?, adults, childAges? }
-// childAges is an array of ages (0-17) for each child traveller.
-//
-// This route runs on the server, so the Duffel API key (read from
-// process.env.DUFFEL_API_KEY inside lib/duffel.ts) is never sent to the
-// browser. The frontend only ever talks to this route.
 export async function POST(request: NextRequest) {
   let body: any;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
 
   const { origin, destination, departureDate, returnDate, adults, childAges } = body || {};
-
-  if (!origin || !destination || !departureDate) {
-    return NextResponse.json(
-      { error: "origin, destination and departureDate are required" },
-      { status: 400 }
-    );
-  }
+  if (!origin || !destination || !departureDate) return NextResponse.json({ error: "origin, destination and departureDate are required" }, { status: 400 });
 
   const adultCount = Number(adults) || 1;
   const parsedChildAges: number[] = Array.isArray(childAges)
-    ? childAges.map((age: any) => Number(age)).filter((age: number) => Number.isFinite(age))
+    ? childAges.map((a: any) => Number(a)).filter((a: number) => Number.isFinite(a))
     : [];
-
-  if (parsedChildAges.some((age) => age < 0 || age > 17)) {
-    return NextResponse.json(
-      { error: "Child ages must be between 0 and 17" },
-      { status: 400 }
-    );
-  }
-
+  if (parsedChildAges.some((a) => a < 0 || a > 17)) return NextResponse.json({ error: "Child ages must be between 0 and 17" }, { status: 400 });
   const totalPassengers = adultCount + parsedChildAges.length;
 
-  // No API key configured — return sample data so the site still works.
-  if (!hasDuffelKey()) {
-    return NextResponse.json({
-      source: "mock",
-      offers: mockFlights(origin, destination, departureDate, totalPassengers),
-    });
-  }
+  if (!hasDuffelKey()) return NextResponse.json({ source: "mock", offers: mockFlights(origin, destination, departureDate, totalPassengers) });
 
   try {
-    const offers = await searchFlights({
-      origin,
-      destination,
-      departureDate,
-      returnDate,
-      adults: adultCount,
-      childAges: parsedChildAges,
-    });
-
-    if (offers.length === 0) {
-      return NextResponse.json({
-        source: "mock",
-        offers: mockFlights(origin, destination, departureDate, totalPassengers),
-        warning: "No live offers were found for these dates — showing sample results instead.",
-      });
-    }
-
+    const offers = await searchFlights({ origin, destination, departureDate, returnDate, adults: adultCount, childAges: parsedChildAges });
+    if (offers.length === 0) return NextResponse.json({ source: "mock", offers: mockFlights(origin, destination, departureDate, totalPassengers), warning: "No live offers found — showing sample results." });
     return NextResponse.json({ source: "duffel", offers });
   } catch (error: any) {
-    return NextResponse.json({
-      source: "mock",
-      offers: mockFlights(origin, destination, departureDate, totalPassengers),
-      warning: `Duffel API error: ${error.message || "unknown error"} — showing sample results instead.`,
-    });
+    return NextResponse.json({ source: "mock", offers: mockFlights(origin, destination, departureDate, totalPassengers), warning: `Duffel error: ${error.message}` });
   }
 }
